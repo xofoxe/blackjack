@@ -11,6 +11,12 @@ namespace WindowsFormsApp1
 {
     public partial class Form1 : Form
     {
+        private const int CardOffsetX = 25;
+        private const int CardOffsetY = 10;
+        private const int PlayerBaseY = 170;
+        private const int DealerBaseY = 50;
+        private const int BaseX = 150;
+
         private GameManager _gameManager;
         private CardAnimator _cardAnimator;
         private GameSaver _gameSaver;
@@ -25,28 +31,34 @@ namespace WindowsFormsApp1
 
         private void InitializeGame()
         {
-            Deck deck = new Deck();
-            ScoreService scoreService = new ScoreService();
-            WinEvaluator winEvaluator = new WinEvaluator(scoreService);
-
-            _gameManager = new GameManager(deck, scoreService, winEvaluator);
-            _cardAnimator = new CardAnimator(GamePanel);
-            _gameSaver = new GameSaver();
-
-            var savedData = _gameSaver.Load();
-            if (savedData != null)
+            try
             {
-                _gameManager.RestoreFromSave(savedData);
-                RedrawHands();
+                Deck deck = new Deck();
+                ScoreService scoreService = new ScoreService();
+                WinEvaluator winEvaluator = new WinEvaluator(scoreService);
+
+                _gameManager = new GameManager(deck, scoreService, winEvaluator);
+                _cardAnimator = new CardAnimator(GamePanel);
+                _gameSaver = new GameSaver();
+
+                var savedData = _gameSaver.Load();
+                if (savedData != null)
+                {
+                    _gameManager.RestoreFromSave(savedData);
+                    RedrawHands();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Не вдалося завантажити гру: " + ex.Message);
             }
         }
 
-        // Redraw player's and dealer's hands
         private void RedrawHands()
         {
             ClearCardsFromGamePanel();
-            RedrawHand(_gameManager.Player.Hand, false);
-            RedrawHand(_gameManager.Dealer.Hand, true);
+            AnimateHand(_gameManager.Player.Hand, false);
+            AnimateHand(_gameManager.Dealer.Hand, true);
         }
 
         private void ClearCardsFromGamePanel()
@@ -58,7 +70,7 @@ namespace WindowsFormsApp1
             }
         }
 
-        private void RedrawHand(List<Card> hand, bool toDealer)
+        private void AnimateHand(List<Card> hand, bool toDealer)
         {
             for (int i = 0; i < hand.Count; i++)
             {
@@ -129,8 +141,8 @@ namespace WindowsFormsApp1
             if (TryPlaceBet(out int betAmount))
             {
                 _gameManager.StartGame();
-                StartCardAnimation(_gameManager.Dealer.Hand, true);
-                StartCardAnimation(_gameManager.Player.Hand, false);
+                AnimateHand(_gameManager.Dealer.Hand, true);
+                AnimateHand(_gameManager.Player.Hand, false);
                 labelPlayerScore.ForeColor = Color.Black;
                 panelWinDesk.Visible = false;
             }
@@ -157,18 +169,16 @@ namespace WindowsFormsApp1
             MessageBox.Show("Please enter a valid bet amount.");
             return false;
         }
-        private void StartCardAnimation(List<Card> hand, bool toDealer)
-        {
-            AnimateCardFromDeck(hand[0], 0, toDealer);
-            AnimateCardFromDeck(hand[1], 1, toDealer);
-        }
 
         private void AnimateNextCard(List<Card> hand, bool toDealer)
         {
             int index = hand.Count - 1;
-            if (index > 1)
+            if (index >= 0)
+            {
                 AnimateCardFromDeck(hand[index], index, toDealer);
+            }
         }
+
         private void AnimateCardFromDeck(Card card, int index, bool toDealer)
         {
             Point start = DeskPictureBox.PointToScreen(new Point(DeskPictureBox.Width / 2, DeskPictureBox.Height / 2));
@@ -179,23 +189,22 @@ namespace WindowsFormsApp1
 
             _cardAnimator.AnimateCard(start, end, spriteCode, true);
         }
+
         private Point GetTargetCardPosition(int index, bool toDealer)
         {
-            int cardOffsetX = 25;
-            int cardOffsetY = 10;
-
-            int baseX = 150;
-            int baseY = toDealer ? 50 : GamePanel.Height - 170;
-
-            return new Point(baseX + index * cardOffsetX, baseY + index * cardOffsetY);
+            int baseY = toDealer ? DealerBaseY : GamePanel.Height - PlayerBaseY;
+            return new Point(BaseX + index * CardOffsetX, baseY + index * CardOffsetY);
         }
+
         private void ShowResult(string result)
         {
             MessageBox.Show(result);
         }
+
         private void Form1_Load(object sender, EventArgs e)
         {
             UpdateUI();
         }
     }
 }
+
