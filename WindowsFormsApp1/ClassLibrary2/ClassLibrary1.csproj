@@ -79,7 +79,7 @@
   <ItemGroup>
     <Compile Include="Card.cs" />
     <Compile Include="CardAnimator.cs" />
-    <Compile Include="CardSpriteMapper.cs" />
+    <Compile Include="CardCodeMapper.cs" />
     <Compile Include="Desk.cs" />
     <Compile Include="FormPlayerController.cs" />
     <Compile Include="GameManager.cs" />
