@@ -13,29 +13,10 @@ namespace ClassLibrary1.Cards
             Suit = suit;
         }
         public string GetCardCode()
-        { 
-            string suitPrefix;
-
-            switch (Suit)
-            {
-                case "♠":
-                    suitPrefix = "cardSpades";
-                    break;
-                case "♥":
-                    suitPrefix = "cardHearts";
-                    break;
-                case "♦":
-                    suitPrefix = "cardDiamonds";
-                    break;
-                case "♣":
-                    suitPrefix = "cardClubs";
-                    break;
-                default:
-                    throw new ArgumentException($"Unknown suit symbol: {Suit}");
-            }
-
-            return $"{suitPrefix}{Value}";
+        {
+            return CardCodeMapper.GetCode(this);
         }
+
 
         public override string ToString()
         {

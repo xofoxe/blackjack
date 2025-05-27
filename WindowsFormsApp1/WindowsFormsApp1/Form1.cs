@@ -1,6 +1,5 @@
 ﻿using ClassLibrary1;
 using ClassLibrary1.Cards;
-using ClassLibrary2;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
