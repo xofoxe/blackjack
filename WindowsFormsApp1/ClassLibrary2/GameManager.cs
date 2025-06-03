@@ -1,10 +1,18 @@
 ﻿using ClassLibrary1.Cards;
 using System;
+using System.Collections.Generic;
 
 namespace ClassLibrary1
 {
     public class GameManager
     {
+
+        private const int InitialPlayerBalance = 2000;
+        private const int InitialDealerBalance = 1000000;
+        private const int PlayerBankruptcyResetBalance = 1000;
+        private const int RequiredCardsToDouble = 2;
+        private const int DealerStandScore = 17;
+
         private readonly Deck _deck;
         private readonly ScoreService _scoreService;
         private readonly WinEvaluator _winEvaluator;
@@ -12,10 +20,8 @@ namespace ClassLibrary1
         public event Action OnGameStateChanged;
         public event Action<GameResult> OnGameEnded;
 
-
         public GameState CurrentState { get; private set; } = GameState.WaitingForBet;
         public GameResult GameResult { get; private set; }
-
 
         public Player Player { get; }
         public Player Dealer { get; }
@@ -26,8 +32,8 @@ namespace ClassLibrary1
             _scoreService = scoreService;
             _winEvaluator = winEvaluator;
 
-            Player = new Player("Player", 2000);
-            Dealer = new Player("Dealer", 1000000);
+            Player = new Player("Player", InitialPlayerBalance);
+            Dealer = new Player("Dealer", InitialDealerBalance);
         }
 
         public void RestoreFromSave(GameSaveData data)
@@ -36,14 +42,8 @@ namespace ClassLibrary1
             Dealer.SetBalance(data.DealerBalance);
             Player.PlaceBet(data.CurrentBet);
 
-
-            Player.ResetHand();
-            foreach (var c in data.PlayerHand)
-                Player.ReceiveCard(new Card(c.Value, c.Suit));
-
-            Dealer.ResetHand();
-            foreach (var c in data.DealerHand)
-                Dealer.ReceiveCard(new Card(c.Value, c.Suit));
+            RestoreHand(Player, data.PlayerHand);
+            RestoreHand(Dealer, data.DealerHand);
 
             if (Enum.TryParse(data.GameState, out GameState state))
                 CurrentState = state;
@@ -51,48 +51,61 @@ namespace ClassLibrary1
             OnGameStateChanged?.Invoke();
         }
 
+        private void RestoreHand(Player player, List<CardData> hand)
+        {
+            player.ResetHand();
+            foreach (var card in hand)
+                player.ReceiveCard(new Card(card.Value, card.Suit));
+        }
+
         public void StartGame()
         {
             if (Player.Balance <= 0)
-            {
-                Player.SetBalance(1000);
-            }
-            if (CurrentState != GameState.WaitingForBet && CurrentState != GameState.GameOver) return;
+                Player.SetBalance(PlayerBankruptcyResetBalance);
+
+            if (!IsReadyToStart()) return;
 
             Player.ResetHand();
             Dealer.ResetHand();
             _deck.Shuffle();
 
-            Player.ReceiveCard(_deck.DrawCard());
-            Player.ReceiveCard(_deck.DrawCard());
-
-            Dealer.ReceiveCard(_deck.DrawCard());
-            Dealer.ReceiveCard(_deck.DrawCard());
+            DealInitialCards(Player);
+            DealInitialCards(Dealer);
 
             CurrentState = GameState.PlayerTurn;
             OnGameStateChanged?.Invoke();
         }
 
+        private void DealInitialCards(Player player)
+        {
+            player.ReceiveCard(_deck.DrawCard());
+            player.ReceiveCard(_deck.DrawCard());
+        }
+
+        private bool IsReadyToStart() =>
+            CurrentState == GameState.WaitingForBet || CurrentState == GameState.GameOver;
+
+        private bool IsPlayerTurn() => CurrentState == GameState.PlayerTurn;
+
         public void PlayerHit()
         {
-            if (CurrentState != GameState.PlayerTurn) return;
-            if (!_scoreService.IsBust(Player))
-            {
-                Player.ReceiveCard(_deck.DrawCard());
-                OnGameStateChanged?.Invoke();
+            if (!IsPlayerTurn() || _scoreService.IsBust(Player)) return;
 
-                if (_scoreService.IsBust(Player))
-                {
-                    CurrentState = GameState.GameOver;
-                    FinishGame();
-                }
+            Player.ReceiveCard(_deck.DrawCard());
+            OnGameStateChanged?.Invoke();
+
+            if (_scoreService.IsBust(Player))
+            {
+                CurrentState = GameState.GameOver;
+                FinishGame();
             }
         }
 
         public void PlayerStand()
         {
-            if (CurrentState != GameState.PlayerTurn) return;
-            while (_scoreService.CalculateScore(Dealer) < 17)
+            if (!IsPlayerTurn()) return;
+
+            while (_scoreService.CalculateScore(Dealer) < DealerStandScore)
             {
                 Dealer.ReceiveCard(_deck.DrawCard());
             }
@@ -103,10 +116,7 @@ namespace ClassLibrary1
 
         public void PlayerDoubleDown()
         {
-            if (CurrentState != GameState.PlayerTurn) return;
-
-            if (Player.Hand.Count != 2)
-                return;
+            if (!IsPlayerTurn() || Player.Hand.Count != RequiredCardsToDouble) return;
 
             Player.DoubleBet();
             Player.ReceiveCard(_deck.DrawCard());
@@ -117,16 +127,6 @@ namespace ClassLibrary1
                 FinishGame();
             else
                 PlayerStand();
-        }
-
-        public void PlayerSplit()
-        {
-            if (CurrentState != GameState.PlayerTurn) return;
-
-            if (Player.Hand.Count == 2 && Player.Hand[0].Value == Player.Hand[1].Value)
-            {
-
-            }
         }
 
         public void HandlePlayerAction(PlayerAction action)
@@ -142,20 +142,11 @@ namespace ClassLibrary1
                 case PlayerAction.Double:
                     PlayerDoubleDown();
                     break;
-                case PlayerAction.Split:
-                    PlayerSplit();
-                    break;
             }
         }
-        public int GetPlayerScore()
-        {
-            return _scoreService.CalculateScore(Player);
-        }
 
-        public int GetDealerScore()
-        {
-            return _scoreService.CalculateScore(Dealer);
-        }
+        public int GetPlayerScore() => _scoreService.CalculateScore(Player);
+        public int GetDealerScore() => _scoreService.CalculateScore(Dealer);
 
         private void FinishGame()
         {
@@ -171,26 +162,25 @@ namespace ClassLibrary1
             }
             else
             {
-                var winner = _winEvaluator.GetWinner(Player, Dealer);
-                if (winner == "Player")
+                switch (_winEvaluator.GetWinner(Player, Dealer))
                 {
-                    Player.WinBet();
-                    GameResult = GameResult.PlayerWin;
-                }
-                else if (winner == "Dealer")
-                {
-                    Player.LoseBet();
-                    GameResult = GameResult.DealerWin;
-                }
-                else
-                {
-                    Player.ReturnBet();
-                    GameResult = GameResult.Tie;
+                    case "Player":
+                        Player.WinBet();
+                        GameResult = GameResult.PlayerWin;
+                        break;
+                    case "Dealer":
+                        Player.LoseBet();
+                        GameResult = GameResult.DealerWin;
+                        break;
+                    default:
+                        Player.ReturnBet();
+                        GameResult = GameResult.Tie;
+                        break;
                 }
             }
+
             CurrentState = GameState.GameOver;
             OnGameEnded?.Invoke(GameResult);
         }
-
     }
 }
